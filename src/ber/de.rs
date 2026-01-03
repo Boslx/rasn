@@ -118,6 +118,16 @@ impl<'input> Decoder<'input> {
         }
     }
 
+    fn check_recursion_depth(&self) -> Result<()> {
+        if self.config.remaining_depth == 0 {
+            return Err(DecodeError::from_kind(
+                DecodeErrorKind::ExceedsMaxParseDepth,
+                self.codec(),
+            ));
+        }
+        Ok(())
+    }
+
     /// Parses a constructed ASN.1 value, checking the `tag`, and optionally
     /// checking if the identifier is marked as encoded. This should be true
     /// in all cases except explicit prefixes.
@@ -130,6 +140,8 @@ impl<'input> Decoder<'input> {
     where
         F: FnOnce(&mut Self) -> Result<D>,
     {
+        self.check_recursion_depth()?;
+
         let (identifier, contents) = self.parse_value(tag)?;
 
         BerDecodeErrorKind::assert_tag(tag, identifier.tag)?;
@@ -679,18 +691,11 @@ impl<'input> crate::Decoder for Decoder<'input> {
         _: Constraints,
     ) -> Result<Vec<D>, Self::Error> {
         self.parse_constructed_contents(tag, true, |decoder| {
+            decoder.config.remaining_depth = decoder.config.remaining_depth.saturating_sub(1);
             let mut items = Vec::new();
 
-            if decoder.input.is_empty() {
-                return Ok(items);
-            }
-
-            while let Ok(item) = D::decode(decoder) {
-                items.push(item);
-
-                if decoder.input.is_empty() {
-                    return Ok(items);
-                }
+            while !decoder.input.is_empty() {
+                items.push(D::decode(decoder)?);
             }
 
             Ok(items)
@@ -702,11 +707,13 @@ impl<'input> crate::Decoder for Decoder<'input> {
         tag: Tag,
         _: Constraints,
     ) -> Result<types::SetOf<D>, Self::Error> {
+        self.check_recursion_depth()?;
         self.parse_constructed_contents(tag, true, |decoder| {
+            decoder.config.remaining_depth = decoder.config.remaining_depth.saturating_sub(1);
             let mut items = types::SetOf::new();
 
-            while let Ok(item) = D::decode(decoder) {
-                items.insert(item);
+            while !decoder.input.is_empty() {
+                items.insert(D::decode(decoder)?);
             }
 
             Ok(items)
@@ -726,6 +733,8 @@ impl<'input> crate::Decoder for Decoder<'input> {
         decode_fn: F,
     ) -> Result<D> {
         self.parse_constructed_contents(tag, true, |decoder| {
+            // decrement remaining depth for nested decoder in sequences
+            decoder.config.remaining_depth = decoder.config.remaining_depth.saturating_sub(1);
             // If there are no fields, or the input is empty and we know that
             // all fields are optional or default fields, we call the default
             // initializer and skip calling the decode function at all.
@@ -770,10 +779,12 @@ impl<'input> crate::Decoder for Decoder<'input> {
         F: FnOnce(Vec<FIELDS>) -> Result<SET, Self::Error>,
     {
         self.parse_constructed_contents(tag, true, |decoder| {
+            // decrement remaining depth for nested decoder in sets
+            decoder.config.remaining_depth = decoder.config.remaining_depth.saturating_sub(1);
             let mut fields = Vec::new();
 
-            while let Ok(value) = FIELDS::decode(decoder) {
-                fields.push(value);
+            while !decoder.input.is_empty() {
+                fields.push(FIELDS::decode(decoder)?);
             }
 
             (field_fn)(fields)
@@ -814,11 +825,16 @@ impl<'input> crate::Decoder for Decoder<'input> {
     where
         D: crate::types::DecodeChoice,
     {
+        self.check_recursion_depth()?;
         let (_, identifier) = parser::parse_identifier_octet(self.input).map_err(|e| match e {
             ParseNumberError::Nom(e) => DecodeError::map_nom_err(e, self.codec()),
             ParseNumberError::Overflow => DecodeError::integer_overflow(32u32, self.codec()),
         })?;
-        D::from_tag(self, identifier.tag)
+
+        self.config.remaining_depth = self.config.remaining_depth.saturating_sub(1);
+        let result = D::from_tag(self, identifier.tag);
+        self.config.remaining_depth = self.config.remaining_depth.saturating_add(1);
+        result
     }
 
     fn decode_extension_addition_with_explicit_tag_and_constraints<D>(

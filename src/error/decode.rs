@@ -722,6 +722,10 @@ pub enum DecodeErrorKind {
         "No input was provided where expected in the given SEQUENCE or INTEGER type"
     ))]
     UnexpectedEmptyInput,
+
+    /// An error when the decoder exceeds maximum allowed parse depth.
+    #[snafu(display("Exceeded maximum parse depth"))]
+    ExceedsMaxParseDepth,
 }
 
 /// `DecodeError` kinds of `Kind::CodecSpecific` which are specific for BER.
