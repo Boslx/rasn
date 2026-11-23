@@ -232,6 +232,15 @@ impl TagTree {
         Self::Choice(&[])
     }
 
+    /// Returns whether the tree contains `tag`.
+    #[must_use]
+    pub const fn contains(&self, tag: Tag) -> bool {
+        match self {
+            Self::Leaf(leaf) => leaf.const_eq(&tag),
+            Self::Choice(nodes) => Self::tag_contains(&tag, nodes),
+        }
+    }
+
     /// Returns the tag with the smallest possible value from the tree.
     #[must_use]
     pub const fn smallest_tag(&self) -> Tag {

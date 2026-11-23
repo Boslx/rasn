@@ -724,7 +724,20 @@ impl<'input> crate::Decoder for Decoder<'input> {
     >(
         &mut self,
     ) -> Result<Option<D>, Self::Error> {
-        <Option<D>>::decode(self)
+        // X.680 §24.5: the group is a notational grouping and adds no wrapper,
+        // so it is present exactly when one of its components' tags is next.
+        if self.input.is_empty() {
+            return Ok(None);
+        }
+        let tag = self.peek_tag()?;
+        let present = D::FIELDS.iter().any(|field| field.tag_tree.contains(tag))
+            || D::EXTENDED_FIELDS
+                .is_some_and(|fields| fields.iter().any(|field| field.tag_tree.contains(tag)));
+        if !present {
+            return Ok(None);
+        }
+
+        D::decode_contents(self).map(Some)
     }
 }
 

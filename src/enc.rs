@@ -93,6 +93,15 @@ pub trait Encode: AsnType {
         self.encode_with_tag_and_constraints(encoder, Self::TAG, constraints, identifier)
     }
 
+    /// Encode only this value's components, without its outer tag or length.
+    ///
+    /// Extension addition groups are a notational grouping and add no wrapper
+    /// to the encoding, so codecs that do not wrap them use this instead of
+    /// [`Encode::encode`]. The default encodes a complete value.
+    fn encode_contents<'b, E: Encoder<'b>>(&self, encoder: &mut E) -> Result<(), E::Error> {
+        self.encode(encoder)
+    }
+
     /// Encode this value with `tag` into the given [`crate::Encoder`] with the
     /// constraints the values this is allowed to encode into.
     ///
@@ -323,6 +332,15 @@ pub trait Encoder<'encoder, const RCL: usize = 0, const ECL: usize = 0> {
     where
         C: crate::types::Constructed<RC, EC>,
         F: FnOnce(&mut Self::AnyEncoder<'b, RC, EC>) -> Result<(), Self::Error>;
+
+    /// Encode the fields of a constructed value without its outer tag or
+    /// length. Used for extension addition groups, which add no wrapper.
+    fn encode_sequence_contents<F>(&mut self, encoder_scope: F) -> Result<(), Self::Error>
+    where
+        F: FnOnce(&mut Self) -> Result<(), Self::Error>,
+    {
+        (encoder_scope)(self)
+    }
 
     /// Encode a `SEQUENCE OF` value.
     fn encode_sequence_of<E: Encode>(

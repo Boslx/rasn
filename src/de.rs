@@ -127,6 +127,15 @@ pub trait Decode: Sized + AsnType {
         Self::decode_with_tag(decoder, Self::TAG)
     }
 
+    /// Decode only this value's components, without its outer tag or length.
+    ///
+    /// Extension addition groups are a notational grouping and add no wrapper
+    /// to the encoding, so codecs that do not wrap them use this instead of
+    /// [`Decode::decode`]. The default decodes a complete value.
+    fn decode_contents<D: Decoder>(decoder: &mut D) -> Result<Self, D::Error> {
+        Self::decode(decoder)
+    }
+
     /// Decode this value implicitly tagged with `tag` from a given ASN.1 decoder.
     ///
     /// **Note** For `CHOICE` and other types that cannot be implicitly tagged
@@ -231,6 +240,16 @@ pub trait Decoder<const RCL: usize = 0, const ECL: usize = 0>: Sized {
         D: crate::types::Constructed<RC, EC>,
         DF: FnOnce() -> D,
         F: FnOnce(&mut Self::AnyDecoder<RC, EC>) -> Result<D, Self::Error>;
+
+    /// Decode the fields of a constructed value without its outer tag or
+    /// length. Used for extension addition groups, which add no wrapper.
+    fn decode_sequence_contents<D, F>(&mut self, decode_fn: F) -> Result<D, Self::Error>
+    where
+        F: FnOnce(&mut Self) -> Result<D, Self::Error>,
+    {
+        (decode_fn)(self)
+    }
+
     /// Decode a `SEQUENCE OF D` where `D: Decode` identified by `tag` from the available input.
     fn decode_sequence_of<D: Decode>(
         &mut self,

@@ -1,0 +1,51 @@
+-- OracleFuzz: compact differential-testing schema for asn1c and rasn.
+-- Must compile with BOTH mouse07410/asn1c and librasn/rasn-compiler.
+-- Mixed tagging: only where tag uniqueness forces it (rasn's derive requires
+-- distinct tags per SEQUENCE component; ASN.1 demands it for the untagged
+-- CHOICE and for tags reused across components).
+OracleFuzz DEFINITIONS ::= BEGIN
+
+Message ::= SEQUENCE {
+    id          INTEGER (0..1023),
+    kind        ENUMERATED { alpha, beta, gamma, delta, ..., omega },
+    payload     OCTET STRING (SIZE(0..64)),
+    label       UTF8String (SIZE(0..64)) OPTIONAL,
+    items       SEQUENCE (SIZE(0..4)) OF INTEGER,
+    flags       BIT STRING { n0(0), n1(1), n2(2), n3(3) } OPTIONAL,
+    oid         OBJECT IDENTIFIER OPTIONAL,
+    stamp       GeneralizedTime OPTIONAL,
+    inner       [0] EXPLICIT InnerSeq OPTIONAL,
+    pick        [1] EXPLICIT Pick OPTIONAL,
+    defFlag     BOOLEAN DEFAULT TRUE,
+    ...,
+    extInt      [2] IMPLICIT INTEGER (1..4) OPTIONAL,
+    extBool     [3] IMPLICIT BOOLEAN OPTIONAL,
+    [[ extOct   [4] IMPLICIT OCTET STRING (SIZE(1..8)) OPTIONAL ]]
+}
+
+InnerSeq ::= SEQUENCE {
+    a       INTEGER OPTIONAL,
+    b       OCTET STRING OPTIONAL
+}
+
+Pick ::= CHOICE {
+    num     INTEGER,
+    text    UTF8String,
+    inner   [0] EXPLICIT InnerSeq,
+    ...,
+    oid     OBJECT IDENTIFIER
+}
+
+Small ::= SEQUENCE {
+    a INTEGER OPTIONAL,
+    b OCTET STRING OPTIONAL
+}
+
+Packet ::= CHOICE {
+    msg     [0] EXPLICIT Message,
+    small   [1] EXPLICIT Small,
+    ...,
+    extOid  OBJECT IDENTIFIER
+}
+
+END

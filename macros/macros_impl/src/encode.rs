@@ -111,6 +111,22 @@ pub fn derive_struct_impl(
     };
 
     let vars = fields_as_vars(&container.fields);
+    let encode_contents_impl = if !config.delegate && !config.set && config.tag.is_none() {
+        quote! {
+            fn encode_contents<'encoder, _ENCODER: #crate_root::Encoder<'encoder>>(
+                &self,
+                encoder: &mut _ENCODER,
+            ) -> core::result::Result<(), _ENCODER::Error> {
+                encoder.encode_sequence_contents(|encoder| {
+                    #(#field_encodings)*
+                    Ok(())
+                })
+            }
+        }
+    } else {
+        quote!()
+    };
+
     Ok(quote! {
         #[allow(clippy::mutable_key_type)]
         impl #impl_generics  #crate_root::Encode for #name #ty_generics #where_clause {
@@ -119,6 +135,8 @@ pub fn derive_struct_impl(
 
                 #encode_impl
             }
+
+            #encode_contents_impl
         }
     })
 }

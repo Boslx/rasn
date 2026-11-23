@@ -966,7 +966,11 @@ impl crate::Encoder<'_> for Encoder {
     where
         E: Encode + crate::types::Constructed<RC, EC>,
     {
-        value.encode(self)
+        // X.680 §24.5: the group is a notational grouping and adds no wrapper.
+        if let Some(value) = value {
+            value.encode_contents(self)?;
+        }
+        Ok(())
     }
 }
 

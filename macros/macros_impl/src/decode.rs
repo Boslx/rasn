@@ -30,6 +30,8 @@ pub fn derive_struct_impl(
         .map(|(i, field)| FieldConfig::new(field, config, i))
         .collect::<Result<Vec<_>, _>>()?;
 
+    let mut decode_contents_impl = quote!();
+
     let decode_impl = if config.delegate {
         let ty = &container.fields.iter().next().unwrap().ty;
         let field_count = field_configs.len();
@@ -263,6 +265,16 @@ pub fn derive_struct_impl(
             quote!(None::<fn() -> Self>)
         };
 
+        if config.tag.is_none() {
+            decode_contents_impl = quote! {
+                fn decode_contents<_DECODER: #crate_root::Decoder>(
+                    decoder: &mut _DECODER,
+                ) -> core::result::Result<Self, _DECODER::Error> {
+                    decoder.decode_sequence_contents(|decoder| Ok(Self #fields))
+                }
+            };
+        }
+
         quote! {
             decoder.decode_sequence::<#count_root_fields, #count_extended_fields, _, _, _>(tag, #initializer_fn, |decoder| {
                 Ok(Self #fields)
@@ -292,6 +304,8 @@ pub fn derive_struct_impl(
             fn decode_with_tag_and_constraints<_DECODER: #crate_root::Decoder>(decoder: &mut _DECODER, tag: #crate_root::types::Tag, constraints: &#crate_root::types::Constraints) -> core::result::Result<Self, _DECODER::Error> {
                 #decode_impl
             }
+
+            #decode_contents_impl
         }
     })
 }
